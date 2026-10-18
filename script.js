@@ -1,3 +1,4 @@
+
 const micButton = document.getElementById("micButton");
 const voiceStatus = document.querySelector(".voice-status p");
 const speechTitle = document.querySelector(".speech-bubble b");
@@ -11,38 +12,40 @@ let recognition = null;
 let isListening = false;
 let isSpeaking = false;
 let currentMode = "conversation";
-let recognitionReady = false;
+let conversation = [];
 
 const modes = {
     conversation: {
         title: "Daily Conversation",
-        greeting: "Hi! I'm your AI English Coach. How was your day?"
+        greeting: "Hi! I'm your AI English Coach. How was your day?",
+        prompt: "Have a natural everyday English conversation."
     },
     introduction: {
         title: "Self Introduction",
-        greeting: "Let's practice your self introduction. What is your name?"
+        greeting: "Let's practice your self introduction. What is your name?",
+        prompt: "Help the learner practice a self introduction."
     },
     interview: {
         title: "Interview Practice",
-        greeting: "Welcome to interview practice. Please introduce yourself."
+        greeting: "Welcome to interview practice. Please introduce yourself.",
+        prompt: "Act as a friendly interviewer and practise job interview questions."
     },
     words: {
         title: "Useful Words & Phrases",
-        greeting: "Let's learn useful English words. Can you tell me one word you know?"
+        greeting: "Let's learn useful English words. What word would you like to learn?",
+        prompt: "Teach useful English words with simple meanings and example sentences."
     },
     confidence: {
         title: "Confidence Mode",
-        greeting: "Don't worry about mistakes. Tell me, how are you today?"
+        greeting: "Don't worry about mistakes. How are you today?",
+        prompt: "Help the learner build confidence speaking English. Be patient and encouraging."
     },
     daily: {
         title: "Daily Life Practice",
-        greeting: "Let's talk about daily life. What did you do today?"
+        greeting: "Let's talk about daily life. What did you do today?",
+        prompt: "Practise simple English conversations about daily life."
     }
 };
-
-// -------------------------
-// SHOW STATUS
-// -------------------------
 
 function setStatus(message) {
     if (voiceStatus) voiceStatus.textContent = message;
@@ -62,14 +65,11 @@ function stopAI() {
     if (girl) girl.classList.remove("speaking");
 }
 
-// -------------------------
-// CHANGE PRACTICE MODE
-// -------------------------
-
 function changeMode(mode) {
     if (!modes[mode]) return;
 
     currentMode = mode;
+    conversation = [];
 
     if (speechTitle) {
         speechTitle.textContent = modes[mode].title;
@@ -80,32 +80,15 @@ function changeMode(mode) {
     speakAI(modes[mode].greeting);
 }
 
-function stopListening() {
-    if (!recognition || !isListening) return;
-
-    try {
-        recognition.stop();
-    } catch (error) {
-        // Recognition may already have stopped.
-    }
-}
-
-// -------------------------
-// MICROPHONE SETUP
-// -------------------------
-
 function setupRecognition() {
     if (!SpeechRecognition) {
-        setStatus(
-            "Speech recognition is unavailable. Please use updated Chrome or Edge."
-        );
+        setStatus("Please use updated Chrome or Edge for voice recognition.");
         return false;
     }
 
-    if (recognitionReady) return true;
+    if (recognition) return true;
 
     recognition = new SpeechRecognition();
-
     recognition.lang = "en-US";
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -113,221 +96,147 @@ function setupRecognition() {
 
     recognition.onstart = () => {
         isListening = true;
-
         if (micButton) micButton.classList.add("listening");
-
         setStatus("🎙️ Listening... Speak now.");
     };
 
     recognition.onresult = async (event) => {
-        const result = event.results[event.resultIndex];
-        const userSpeech = result[0].transcript.trim();
+        const userSpeech =
+            event.results[event.resultIndex][0].transcript.trim();
+
+        isListening = false;
+        if (micButton) micButton.classList.remove("listening");
 
         if (!userSpeech) {
-            setStatus("I couldn't hear that. Tap the mic and try again.");
+            setStatus("I couldn't hear you. Please try again.");
             return;
         }
 
-        isListening = false;
-
-        if (micButton) micButton.classList.remove("listening");
-
-        setStatus("🤔 Preparing your response...");
         setSpeech("You said: " + userSpeech);
-
         await talkToAI(userSpeech);
     };
 
     recognition.onerror = (event) => {
         isListening = false;
-
         if (micButton) micButton.classList.remove("listening");
 
-        const messages = {
-            "not-allowed":
-                "Microphone blocked. Allow microphone access in browser settings.",
-            "service-not-allowed":
-                "Speech service blocked. Check browser permissions.",
-            "no-speech":
-                "No speech detected. Tap the mic and speak clearly.",
-            "audio-capture":
-                "Microphone not found. Check your microphone connection.",
-            "network":
-                "Speech service network error. Check your internet connection.",
-            "aborted":
-                "Listening stopped. Tap the mic when you're ready."
+        const errors = {
+            "not-allowed": "Please allow microphone access in your browser.",
+            "no-speech": "No speech detected. Tap the mic and try again.",
+            "network": "Speech recognition network error. Check your internet.",
+            "audio-capture": "Microphone not found. Check your microphone."
         };
 
-        setStatus(
-            messages[event.error] ||
-            "Microphone error: " + event.error + ". Please try again."
-        );
+        setStatus(errors[event.error] || "Microphone error. Please try again.");
     };
 
     recognition.onend = () => {
         isListening = false;
-
         if (micButton) micButton.classList.remove("listening");
     };
 
-    recognitionReady = true;
     return true;
 }
-
-// -------------------------
-// MIC BUTTON CLICK
-// -------------------------
 
 if (micButton) {
     micButton.addEventListener("click", () => {
         if (isListening) {
-            stopListening();
-            setStatus("Listening stopped. Tap the mic to try again.");
+            try {
+                recognition.stop();
+            } catch (error) {
+                console.log(error);
+            }
             return;
         }
 
-        // Stop AI voice before listening.
         stopAI();
 
         if (!setupRecognition()) return;
 
-        setStatus("🎙️ Starting microphone...");
-
         try {
             recognition.start();
         } catch (error) {
-            setStatus(
-                "Please wait a moment, then tap the microphone again."
-            );
+            setStatus("Please wait a moment and tap the mic again.");
         }
     });
 }
 
-// -------------------------
-// SIMPLE ENGLISH COACH
-// -------------------------
-
 async function talkToAI(userSpeech) {
     const original = userSpeech.trim();
-    const lower = original.toLowerCase();
+    if (!original) return;
 
-    let feedback = "Good effort! Keep speaking English.";
-    let better = original;
-    let reply = "That's interesting!";
-    let question = "Can you tell me more?";
+    conversation.push({
+        role: "user",
+        content: original
+    });
 
-    if (/^(hi|hello|hey)\b/i.test(lower)) {
-        feedback = "Your greeting is correct.";
-        reply = "Hello! It's nice to talk with you.";
-        question = "How are you today?";
-    } else if (
-        lower.includes("my name is") ||
-        lower.startsWith("i am ") ||
-        lower.startsWith("i'm ")
-    ) {
-        feedback = "Good job introducing yourself.";
-        reply = "Nice to meet you!";
-        question = "What are you studying?";
-    } else if (
-        lower.includes("i am fine") ||
-        lower.includes("i'm fine") ||
-        lower.includes("i am good") ||
-        lower.includes("i'm good")
-    ) {
-        feedback = "Your answer is understandable.";
-        reply = "I'm glad to hear that.";
-        question = "What did you do today?";
-    } else if (
-        lower.includes("college") ||
-        lower.includes("student") ||
-        lower.includes("study")
-    ) {
-        feedback = "Good! You're talking about your studies.";
-        reply = "That's great. Keep working towards your goals.";
-        question = "Which subject do you like the most?";
-    } else if (
-        lower.includes("thank you") ||
-        lower.includes("thanks")
-    ) {
-        feedback = "Great! That's a polite expression.";
-        reply = "You're welcome!";
-        question = "What would you like to talk about next?";
-    } else if (
-        lower.includes("my hobby") ||
-        lower.includes("hobbies")
-    ) {
-        feedback = "Good topic! You can also say, 'My hobbies are...'";
-        reply = "Hobbies are a great topic to practise.";
-        question = "What do you enjoy doing in your free time?";
-    } else if (currentMode === "words") {
-        feedback = "Let's build your vocabulary.";
-        reply = "A useful word is 'confident'. It means believing in yourself.";
-        question = "Can you make a sentence using the word confident?";
-    } else if (currentMode === "introduction") {
-        feedback = "Good attempt at your introduction.";
-        reply = "You can introduce yourself by sharing your name and studies.";
-        question = "What are your strengths?";
-    } else if (currentMode === "interview") {
-        feedback = "Good interview practice!";
-        reply = "Try to answer clearly and confidently.";
-        question = "Why should we select you?";
-    } else if (currentMode === "confidence") {
-        feedback = "Well done for speaking! Mistakes help you learn.";
-        reply = "Take your time. You are improving with practice.";
-        question = "Tell me one thing you are proud of.";
-    } else if (
-        lower.startsWith("what ") ||
-        lower.startsWith("why ") ||
-        lower.startsWith("how ") ||
-        lower.startsWith("where ") ||
-        lower.startsWith("when ")
-    ) {
-        feedback = "Good question!";
-        reply = "Let's explore that together.";
-        question = "Can you ask me another question in English?";
-    } else if (
-        lower.startsWith("i ") ||
-        lower.startsWith("my ") ||
-        lower.startsWith("today ")
-    ) {
-        feedback = "Your sentence is a good start.";
-        reply = "Thank you for sharing that with me.";
-        question = "Can you tell me a little more?";
+    setStatus("🤔 Thinking...");
+
+    try {
+        const messages = conversation.slice(-10);
+
+        const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                messages,
+                mode: currentMode
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "AI request failed");
+        }
+
+        const answer = data.reply;
+
+        if (!answer) {
+            throw new Error("The AI returned an empty reply.");
+        }
+
+        conversation.push({
+            role: "assistant",
+            content: answer
+        });
+
+        showAIResponse(answer, original);
+
+    } catch (error) {
+        console.error("SpeakAI error:", error);
+
+        conversation.pop();
+
+        setSpeech(
+            "Sorry, I couldn't connect to the AI. Please try again."
+        );
+
+        setStatus(
+            "❌ AI connection failed. Check the API key and Vercel deployment."
+        );
     }
-
-    showAIResponse(feedback, better, reply, question, original);
 }
 
-// -------------------------
-// DISPLAY RESPONSE
-// -------------------------
-
-function showAIResponse(feedback, better, reply, question, userSpeech) {
-    const displayText =
-        "💡 " + feedback +
-        "\n\n✨ Better: " + better +
-        "\n\n" + reply +
-        "\n\n❓ " + question;
-
-    setSpeech(displayText);
+function showAIResponse(answer, userSpeech) {
+    setSpeech(answer);
 
     if (typeof window.addConversation === "function") {
         window.addConversation();
     }
 
+    // Count a correction only when the AI explicitly suggests one.
     if (
-        better.toLowerCase() !== userSpeech.toLowerCase() &&
+        /better sentence|correct sentence|more natural|correction:/i.test(answer) &&
         typeof window.addCorrectSentence === "function"
     ) {
         window.addCorrectSentence();
     }
 
-    speakAI(reply + " " + question);
+    speakAI(answer);
 }
-
-// -------------------------
-// AI VOICE
-// -------------------------
 
 function speakAI(text) {
     if (!("speechSynthesis" in window)) {
@@ -338,7 +247,6 @@ function speakAI(text) {
     window.speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-
     utterance.lang = "en-US";
     utterance.rate = 0.9;
     utterance.pitch = 1.1;
@@ -354,41 +262,30 @@ function speakAI(text) {
         voices.find(voice => /^en-US/i.test(voice.lang)) ||
         voices.find(voice => /^en/i.test(voice.lang));
 
-    if (selectedVoice) {
-        utterance.voice = selectedVoice;
-    }
+    if (selectedVoice) utterance.voice = selectedVoice;
 
     utterance.onstart = () => {
         isSpeaking = true;
-
         if (girl) girl.classList.add("speaking");
-
         setStatus("🗣️ AI is speaking...");
     };
 
     utterance.onend = () => {
         isSpeaking = false;
-
         if (girl) girl.classList.remove("speaking");
-
         setStatus("🎤 Your turn! Tap the mic and speak again.");
     };
 
     utterance.onerror = () => {
         isSpeaking = false;
-
         if (girl) girl.classList.remove("speaking");
-
         setStatus("AI voice stopped. Tap the mic to continue.");
     };
 
     window.speechSynthesis.speak(utterance);
 }
 
-// -------------------------
-// QUICK ACCESS CARDS
-// -------------------------
-
+// Quick practice cards
 document.querySelectorAll(".quick-card").forEach(card => {
     card.addEventListener("click", () => {
         const text = card.textContent.toLowerCase();
@@ -403,14 +300,13 @@ document.querySelectorAll(".quick-card").forEach(card => {
             changeMode("words");
         } else if (text.includes("confidence mode")) {
             changeMode("confidence");
+        } else if (text.includes("daily life")) {
+            changeMode("daily");
         }
     });
 });
 
-// -------------------------
-// SIDEBAR BUTTONS
-// -------------------------
-
+// Sidebar navigation
 const sidebarButtons = document.querySelectorAll(".sidebar > button");
 
 sidebarButtons.forEach((button, index) => {
@@ -422,70 +318,43 @@ sidebarButtons.forEach((button, index) => {
             case 0:
                 stopAI();
                 currentMode = "conversation";
-
-                if (speechTitle) {
-                    speechTitle.textContent = "AI English Coach";
-                }
-
-                setSpeech(
-                    "Hi! I'm your English Coach. Tap the microphone and speak."
-                );
-
+                conversation = [];
+                if (speechTitle) speechTitle.textContent = "AI English Coach";
+                setSpeech("Hi! I'm your English Coach. Tap the microphone and speak.");
                 setStatus("🎤 Tap the microphone and speak.");
                 break;
-
             case 1:
                 changeMode("conversation");
                 break;
-
             case 2:
                 changeMode("introduction");
                 break;
-
             case 3:
                 changeMode("interview");
                 break;
-
             case 4:
                 changeMode("words");
                 break;
-
             case 5:
                 changeMode("confidence");
                 break;
-
             case 6:
                 stopAI();
-
                 setSpeech(
-                    "Settings: Use Chrome or Edge, allow microphone access, and keep your internet connection on for speech recognition."
+                    "Settings: Use Chrome or Edge, allow microphone access, and keep your internet connection on."
                 );
-
-                setStatus(
-                    "⚙️ Check your browser's microphone permission settings."
-                );
+                setStatus("⚙️ Check your browser microphone permissions.");
                 break;
         }
     });
 });
 
-// -------------------------
-// INITIAL STATE
-// -------------------------
+// Initial screen
+if (speechTitle) speechTitle.textContent = "AI English Coach";
 
-if (speechTitle) {
-    speechTitle.textContent = "AI English Coach";
-}
-
-setSpeech(
-    "Hi! I'm your English Coach. Tap the microphone and speak."
-);
-
+setSpeech("Hi! I'm your English Coach. Tap the microphone and speak.");
 setStatus("🎤 Tap the microphone and speak.");
 
-// Check browser support without asking for microphone permission.
 if (!SpeechRecognition) {
-    setStatus(
-        "Speech recognition is unavailable. Please use updated Chrome or Edge."
-    );
+    setStatus("Please use updated Chrome or Edge for voice recognition.");
 }
