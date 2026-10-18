@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpeakAI Progress</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="progress-page">
+
+    <h1>📊 My English Progress</h1>
+
+    <div class="progress-grid">
+
+        <div class="progress-card">
+            <h2>🗣️ Conversations</h2>
+            <p class="progress-value" id="conversationCount">0</p>
+            <span>Conversations completed</span>
+        </div>
+
+        <div class="progress-card">
+            <h2>✨ Correct Sentences</h2>
+            <p class="progress-value" id="correctCount">0</p>
+            <span>Sentences improved</span>
+        </div>
+
+        <div class="progress-card">
+            <h2>🔥 Practice Streak</h2>
+            <p class="progress-value" id="streakCount">1</p>
+            <span>Days practiced</span>
+        </div>
+
+    </div>
+
+    <div class="progress-section">
+
+        <h2>🎯 Keep Practicing!</h2>
+
+        <p>
+            Speak every day to improve your English
+            speaking confidence.
+        </p>
+
+        <button onclick="goHome()">
+            🎤 Continue Speaking
+        </button>
+
+    </div>
+
+</div>
+
+<script>
+
+const conversations =
+    Number(
+        localStorage.getItem("conversations")
+    ) || 0;
+
+const correctSentences =
+    Number(
+        localStorage.getItem("correctSentences")
+    ) || 0;
+
+document.getElementById(
+    "conversationCount"
+).textContent = conversations;
+
+document.getElementById(
+    "correctCount"
+).textContent = correctSentences;
+
+
+function goHome() {
+
+    window.location.href =
+        "index.html";
+}
+
+</script>
+
+</body>
+</html>
