@@ -1,22 +1,44 @@
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({ error: "API key is not configured" });
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+
+  if (!apiKey) {
+    return res.status(500).json({
+      error: "GEMINI_API_KEY is missing in Vercel Environment Variables."
+    });
   }
 
   try {
     const { messages = [] } = req.body || {};
 
+    if (!Array.isArray(messages)) {
+      return res.status(400).json({
+        error: "Messages must be an array."
+      });
+    }
+
     const contents = messages
-      .filter(m => m && ["user", "assistant"].includes(m.role) && m.content)
+      .filter(
+        (message) =>
+          message &&
+          ["user", "assistant"].includes(message.role) &&
+          typeof message.content === "string" &&
+          message.content.trim()
+      )
       .slice(-10)
-      .map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: String(m.content).slice(0, 3000) }]
+      .map((message) => ({
+        role: message.role === "assistant" ? "model" : "user",
+        parts: [
+          {
+            text: message.content.trim().slice(0, 3000)
+          }
+        ]
       }));
 
     while (contents.length && contents[0].role === "model") {
@@ -24,7 +46,9 @@ export default async function handler(req, res) {
     }
 
     if (!contents.length) {
-      return res.status(400).json({ error: "Please send a message" });
+      return res.status(400).json({
+        error: "Please speak or send a message first."
+      });
     }
 
     const response = await fetch(
@@ -33,17 +57,26 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY
+          "x-goog-api-key": apiKey
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{
-              text: "You are SpeakAI, a friendly English speaking partner. Reply naturally and briefly, like a real conversation. Understand the user's latest message and answer it directly. Gently correct important English mistakes and show a natural version when useful. Ask exactly one relevant follow-up question. Avoid repeating phrases and never always say 'Ask me more'. Use simple English suitable for a learner."
-            }]
+            parts: [
+              {
+                text:
+                  "You are SpeakAI, a friendly English speaking partner. " +
+                  "Answer the user's latest message directly and naturally. " +
+                  "Use simple English suitable for a learner. " +
+                  "Gently correct important mistakes when useful. " +
+                  "Ask exactly one relevant follow-up question. " +
+                  "Avoid repeating previous answers or saying 'Ask me more' repeatedly. " +
+                  "Keep replies brief and friendly."
+              }
+            ]
           },
           contents,
           generationConfig: {
-            temperature: 0.8,
+            temperature: 0.7,
             maxOutputTokens: 250
           }
         })
@@ -53,20 +86,35 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
+      console.error("Gemini API error:", response.status, data);
+
       return res.status(502).json({
-        error: data?.error?.message || "AI request failed"
+        error:
+          data?.error?.message ||
+          `Gemini API request failed with status ${response.status}.`
       });
     }
 
-    const reply = data.candidates?.[0]?.content?.parts
-      ?.map(part => part.text || "")
+    const reply = data?.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text || "")
       .join("")
       .trim();
 
-    return res.status(200).json({
-      reply: reply || "Could you tell me a little more?"
-    });
+    if (!reply) {
+      console.error("Gemini returned no text:", JSON.stringify(data));
+
+      return res.status(502).json({
+        error:
+          "Gemini returned no reply. Check API availability and quota."
+      });
+    }
+
+    return res.status(200).json({ reply });
   } catch (error) {
-    return res.status(500).json({ error: "Something went wrong on the server" });
+    console.error("SpeakAI backend error:", error);
+
+    return res.status(500).json({
+      error: "Server error: " + (error.message || "Unknown error")
+    });
   }
 }
